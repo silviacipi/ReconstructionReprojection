@@ -98,19 +98,30 @@ class registrationThread (threading.Thread):
     def run(self):
 	threadLimiter.acquire()
 	try:
-        	p1,p2=rotateRegShiftLoop(self.indexPerProc,self.rec,self.dataSmall,self.dataSmallOriginal,self.totMovement,self.cols, self.rows, self.height,self.angleStep,self.crop, self.mycent)
+        	p1,p2,p3=rotateRegShiftLoop(self.indexPerProc,self.rec,self.dataSmall,self.dataSmallOriginal,self.totMovement,self.cols, self.rows, self.height,self.angleStep,self.crop, self.mycent)
         	threadLock.acquire()
 		self.dataSmall[p1,:,:]=p2
+		self.totMovement[p1,:]=p3
         	threadLock.release()
 	finally:
             	threadLimiter.release()
 
 def rotateRegShiftLoop(indexPerProc,rec,dataSmall,dataSmallOriginal,totMovement,cols, rows, height,angleStep,crop, mycent):
 	alpha=1
+	#indexPerProc=[0,150,300,450,599]
 	for j in indexPerProc:
-		index,dst1,p1=rotateRegisterShift(rec.copy(),dataSmall[j,:,:],dataSmallOriginal[j,:,:],totMovement[j,:],cols, rows, height,angleStep, j ,crop, mycent)
+	     	#if j>0:
+		#print j,'j'
+		index,dst1,p1, totMovement1=rotateRegisterShift(rec.copy(),dataSmall[j,:,:],dataSmallOriginal[j,:,:],totMovement[j,:],cols, rows, height,angleStep, j ,crop, mycent)
+		
 		dataSmall[index,:,:]=alpha*dst1+(1-alpha)*p1
-	return indexPerProc, dataSmall[indexPerProc,:,:]
+		totMovement[index,:]=totMovement1
+	     	
+	return indexPerProc, dataSmall[indexPerProc,:,:],totMovement[indexPerProc,:]
+
+
+
+
 
 def rotateMatrix(rec,M,cols,rows,height):
     for l in range (height):
@@ -122,15 +133,15 @@ def rotateMatrix(rec,M,cols,rows,height):
 def rotateRegisterShift(rec,dataSmallj,dataSmallOriginal,totMovement,cols, rows,height, angleStep, j ,crop,mycent):
 	tmp=np.zeros(np.shape(rec))
 	if j>0:
-		M = cv2.getRotationMatrix2D((cols/2,rows/2),-angleStep*j,1)				
+		print j, angleStep*j+270.0, angleStep
+		M = cv2.getRotationMatrix2D((cols/2,rows/2),-angleStep*j+0.0,1)	
+		#M = cv2.getRotationMatrix2D((cols/2,rows/2),angleStep*j,1)			
 		tmp=rotateMatrix(rec,M,cols,rows,height)
 		print 'rotation completed'
         else:
 		tmp=rec	
 	print 'reproject...'
 	p1=np.sum(tmp,0)
-
-	
 	M2 = np.float32([[1,0,-(cols/2-mycent)],[0,1,0]])                        
 	p=dataSmallj
         d,e=np.shape(p)
@@ -145,21 +156,27 @@ def rotateRegisterShift(rec,dataSmallj,dataSmallOriginal,totMovement,cols, rows,
 	print 'register...'
         shift, error, diffphase = register_translation(p[sliceFrom:sliceTo,colFrom:colTo], p1[sliceFrom:sliceTo,colFrom:colTo], 100)
         p=dataSmallj
+	
 	#plt.figure(2)
 	#plt.imshow(p)
+	#plt.show()
+	#raw_input('press enter')
+	
         #print shift, error, diffphase
         move=shift[1]
         print shift, error, diffphase, move
-	
+	print totMovement,'totMovement'
         totMovement=totMovement+[-move,-shift[0]]
+	print totMovement,'totMovement'
 	M1 = np.float32([[1,0,totMovement[0]],[0,1,totMovement[1]]])
         print 'matrix calculated'
         dst1 = cv2.warpAffine(dataSmallOriginal,M1,(e,d))
+	#plt.figure(2)
+	#plt.imshow(dataSmallOriginal)
 	#plt.figure(3)
 	#plt.imshow(dst1)
 	#plt.show()
-	return j, dst1,p1
-
+	return j, dst1,p1, totMovement
 
 def rotateRegisterShiftMPI(a,rec,dataSmall,dataSmallOriginal,totMovement,cols, rows, height,angleStep, crop, mycent):
 	print 
@@ -172,7 +189,7 @@ def rotateRegisterShiftMPI(a,rec,dataSmall,dataSmallOriginal,totMovement,cols, r
 		b= a if  processNr==(size-1) else ((processNr+1)*numImPerProc+1)
 		indexPerProc=[j for j in range((processNr*numImPerProc+1),b)]
 	
-		print 'sending thread ', processNr
+		print 'sending thread ', processNr, 'angleStep',angleStep
 		thread = registrationThread(indexPerProc,processNr,rec.copy(),dataSmall,dataSmallOriginal,totMovement,cols, rows, height,angleStep,crop, mycent)
 		thread.start()
         	threads.append(thread)
@@ -182,12 +199,6 @@ def rotateRegisterShiftMPI(a,rec,dataSmall,dataSmallOriginal,totMovement,cols, r
   
 	result=dataSmall
         return result
-
-
-
-
-
-
 
 
 
