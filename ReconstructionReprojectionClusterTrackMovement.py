@@ -20,6 +20,7 @@ from clusterMPITrackMovement import rotateRegisterShiftMPI
 #from clusterMPI import test
 from multiprocessing import Process
 #import mpi4py.MPI
+from shutil import copyfile
 
 def findCentre(firstImage,lastImage):
 	firstImageFlipped = np.fliplr(firstImage)
@@ -157,9 +158,29 @@ def f(task):
 	print 'inside Function'
 	print 'task', task
 
+def savuFile(pathToSavu,directory):
+    try:
+	print 'copying locally savu config file'
+	print pathToSavu, directory
+	print(os.path.basename(pathToSavu))
+	cmd="cp %s %s" %(pathToSavu,directory)
+	print cmd
+	raw_input('press enter')
+	os.system(cmd)
+    	#shutil.copyfile(pathToSavu, directory)	
+    except:
+	print 'failed copying savu file'
+    newPathToSavu=directory+os.path.basename(pathToSavu)
+    return newPathToSavu
+
 def tomography(folder,fileNr,pathToSavu, dataFolder='data',centre=-1,nIter=10,crop=[0,-1,0,-1], angleRange=180.0,normCrop=[0,50,0,50],year=''):
     alpha=1.0
     directory=fullPath(folder,fileNr,year)
+    savuFile(pathToSavu,directory)
+    pathToSavu=savuFile(pathToSavu,directory)
+    
+    print 'path to savu config ', pathToSavu
+    raw_input('press enter')
     nxsfileName=directory+str(fileNr)+'_tomoNX.h5'
     print 'file containing projections',nxsfileName
     mypath=h5py.File(nxsfileName,'r') 
@@ -363,24 +384,24 @@ if __name__ == "__main__":
     year=2019
     #folder='mg23919-1'
     folder='cm22975-4'
-    fileNr=285448
+    fileNr=282522
 
-    nIter=10
-    centre=155#-1
-    minSlice=10
-    maxSlice=100#290
-    minCol=50
-    maxCol=300
+    nIter=2
+    centre=203#-1
+    minSlice=100
+    maxSlice=150#290
+    minCol=100
+    maxCol=200
     crop=[minSlice,maxSlice,minCol,maxCol]
     #normFromX=0
     #normToX=50
     normFromY=0
     normToY=50
-    normFromX=350
-    normToX=390   
+    normFromX=0
+    normToX=50   
     normCrop=[normFromX,normToX,normFromY,normToY]
-    angleRange=180
-    pathToSavu='/dls_sw/i13-1/scripts/Silvia/Reprojection/ReconstructionReprojection/registrationSavu2.nxs'
+    angleRange=149.7
+    pathToSavu='/dls_sw/i13-1/scripts/Silvia/Reprojection/ReconstructionReprojection/registrationSavuLimAngle.nxs'
     #for i in range(145,165,5):
     #centre=i
     tomography(folder,fileNr,pathToSavu,'data',centre,nIter, crop,angleRange,normCrop,year)
