@@ -92,11 +92,11 @@ def myRec(obj,continueLoop,pathTot,dataFolder):
     return continueLoop,temp, pathTot
 
 
-def changeCentre(pathToSavu,newCentre):
+def changeCentre(pathToSavu,newCentre,recAlg):
 	f1 = h5py.File(pathToSavu, 'r+')
     	data = f1['entry/plugin/   3 /data']
 	print data
-	newCentre1='{"in_datasets":[],"init_vol":null,"res_norm":false,"ratio":0.95,"log":false,"algorithm":"SIRT_CUDA","out_datasets":[],"centre_pad":false,"outer_pad":true,"log_func":"np.nan_to_num(-np.log(sino))","n_iterations":100,"force_zero":[null, null],"vol_shape":"fixed", "preview":[],"centre_of_rotation":'+str(newCentre)+',"FBP_filter":"ram-lak"}'
+	newCentre1='{"in_datasets":[],"init_vol":null,"res_norm":false,"ratio":0.95,"log":false,"algorithm":"'+str(recAlg)+'","out_datasets":[],"centre_pad":false,"outer_pad":true,"log_func":"np.nan_to_num(-np.log(sino))","n_iterations":100,"force_zero":[null, null],"vol_shape":"fixed", "preview":[],"centre_of_rotation":'+str(newCentre)+',"FBP_filter":"ram-lak"}'
     	data[...]=newCentre1
 	
     	print 'cedntre changed', data#
@@ -176,7 +176,7 @@ def savuFile(pathToSavu,directory2):
     #raw_input('press enter')
     return newPathToSavu
 
-def tomography(folder,fileNr,pathToSavu, dataFolder='data',centre=-1,nIter=10,crop=[0,-1,0,-1], angleRange=180.0,normCrop=[0,50,0,50],year='',outputDirectory='test'):
+def tomography(folder,fileNr,pathToSavu, dataFolder='data',centre=-1,nIter=10,crop=[0,-1,0,-1], angleRange=180.0,normCrop=[0,50,0,50],year='',outputDirectory='test',recAlg='SIRT_CUDA'):
     alpha=1.0
     directory=fullPath(folder,fileNr,year)
     directory2=directory+outputDirectory+'/'
@@ -242,7 +242,7 @@ def tomography(folder,fileNr,pathToSavu, dataFolder='data',centre=-1,nIter=10,cr
 		else:
 			mycent=centre
 		print 'updating centre in savu configuration file with value', mycent
-		changeCentre(pathToSavu,mycent)
+		changeCentre(pathToSavu,mycent,recAlg)
  		launchSavu(name2,pathToSavu,directory2)
 		attemptLaunching=0
 		while attemptLaunching<5:
@@ -309,7 +309,8 @@ if __name__ == "__main__":
 	pathToSavu='/dls_sw/i13-1/scripts/Silvia/Reprojection/ReconstructionReprojection/savuFBP.nxs'
 	counter=14
 	outputDirectory='testFBP'
-	tomography(folder,fileNr,pathToSavu,'data',centre,nIter, crop,angleRange,normCrop,year,outputDirectory)
+	recAlg='FBP_CUDA'
+	tomography(folder,fileNr,pathToSavu,'data',centre,nIter, crop,angleRange,normCrop,year,outputDirectory,recAlg)
 	'''
 	for j in range(135,145,1):
 		centre=j
