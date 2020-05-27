@@ -21,6 +21,16 @@ from clusterMPITrackMovement import rotateRegisterShiftMPI
 from multiprocessing import Process
 #import mpi4py.MPI
 from shutil import copyfile
+import json
+from json import JSONEncoder
+from json import JSONDecoder
+
+
+class NumpyArrayEncoder(JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, numpy.ndarray):
+            return obj.tolist()
+        return JSONEncoder.default(self, obj)
 
 def findCentre(firstImage,lastImage):
 	firstImageFlipped = np.fliplr(firstImage)
@@ -102,6 +112,71 @@ def changeCentre(pathToSavu,newCentre,recAlg):
     	print 'cedntre changed', data#
 	f1.close()
 
+def changeSavuFile(savuFile,dictionary):
+    dataFolder='AstraReconGpu'
+    contLoop=True
+    pathTot=''
+    print 'changing file ', savuFile
+    mypathTemp=h5py.File(savuFile,'r+') 
+    contLoop, pathToData, pathTot=myRecSavu(mypathTemp,contLoop,pathTot,dataFolder)
+    if not (contLoop):
+            print 'database "',dataFolder,'" found in  ', pathTot
+            pathTot=pathTot+'/data'
+            #print type(str(mypathTemp[str(pathTot)].value[0]))
+            print type(mypathTemp[str(pathTot)][...])
+            encodedNumpyData = json.dumps(mypathTemp[str(pathTot)].value[0], cls=NumpyArrayEncoder)  
+            print type(encodedNumpyData)
+            decodedArrays = json.loads(encodedNumpyData)
+            print type(decodedArrays.encode('ascii','ignore'))
+            tmp=decodedArrays.encode('ascii','ignore')
+            json_acceptable_string = tmp.replace("'", "\"")  
+            print json_acceptable_string, type(json_acceptable_string)
+            myDict=json.loads(json_acceptable_string)
+            #print type(myDict)
+            for key in dictionary:
+                print 'changing ', key, myDict[key], dictionary[key]
+                myDict[key]=dictionary[key]
+            #print myDict['centre_of_rotation']
+            #myDict['centre_of_rotation']=140
+            print myDict['centre_of_rotation']
+            encodedNumpyData=json.dumps(myDict,cls=NumpyArrayEncoder,separators=(',', ':'))
+            #print np.array(encodedNumpyData), type(np.array(encodedNumpyData))
+            mypathTemp[str(pathTot)][...]=np.array(encodedNumpyData)
+            #print type(mypathTemp[str(pathTot)][...])
+            #mypathTemp[str(pathTot)][...]=encodedNumpyData
+    else:
+            print 'failed updating'
+    mypathTemp.close()
+    print 'file closed'
+
+
+def myRecSavu(obj,continueLoop,pathTot,dataFolder):  
+    ### recursive function to look for the data database
+    temp=None
+    i=1
+    tempPath=''
+    for name, value in obj.items():
+        if continueLoop:
+            #check if the object is a group
+            if isinstance(obj[name], h5py.Group):
+                tempPath='/'+name
+                if len(obj[name])>0:
+                    continueLoop,temp,tempPath= myRecSavu(obj[name],continueLoop,tempPath,dataFolder)
+                else:
+                    continue
+            else:
+                test=obj[name]
+                temp1=dataFolder
+                if temp1==test.value[0]: 
+                    tempPath=pathTot
+                    continueLoop=False
+                    return continueLoop,test.name,tempPath
+            i=i+1
+        if (i-1)>len(obj.items()):
+            tempPath=''
+    pathTot=pathTot+tempPath
+    print pathTot
+    return continueLoop,temp, pathTot
 
 def fullPath(folder,fileNr,year=''):
 	if year=='':
@@ -176,7 +251,7 @@ def savuFile(pathToSavu,directory2):
     #raw_input('press enter')
     return newPathToSavu
 
-def tomography(folder,fileNr,pathToSavu, dataFolder='data',centre=-1,nIter=10,crop=[0,-1,0,-1], angleRange=180.0,normCrop=[0,50,0,50],year='',outputDirectory='test',recAlg='SIRT_CUDA'):
+def tomography(folder,fileNr,pathToSavu, dictionary,dataFolder='data',nIter=10,crop=[0,-1,0,-1], angleRange=180.0,normCrop=[0,50,0,50],year='',outputDirectory='test'):
     alpha=1.0
     directory=fullPath(folder,fileNr,year)
     directory2=directory+outputDirectory+'/'
@@ -241,8 +316,10 @@ def tomography(folder,fileNr,pathToSavu, dataFolder='data',centre=-1,nIter=10,cr
 			mycent=findCentre(dataSmall[0,:,:],dataSmall[-1,:,:])
 		else:
 			mycent=centre
-		print 'updating centre in savu configuration file with value', mycent
-		changeCentre(pathToSavu,mycent,recAlg)
+		print 'updating savu configuration file'
+		changeSavuFile(pathToSavu,dictionary)
+		#raw_input('press enter')
+		#changeCentre(pathToSavu,mycent,recAlg)
  		launchSavu(name2,pathToSavu,directory2)
 		attemptLaunching=0
 		while attemptLaunching<5:
@@ -274,6 +351,12 @@ def tomography(folder,fileNr,pathToSavu, dataFolder='data',centre=-1,nIter=10,cr
                 
 		tmp=np.zeros(np.shape(rec))
 		pippo=np.copy(dataSmall)
+		'''
+		if dictionary['algorithm']=='FBP_CUDA':
+			mycentNew=int(c/2)
+		else:
+			mycentNew=mycent
+		'''
 		test=rotateRegisterShiftMPI(int(a),np.copy(rec),np.copy(pippo),np.copy(dataSmallOriginal),totMovement,cols, rows, height,angleStep,crop, mycent)
 
 		dataSmall=test
@@ -291,8 +374,8 @@ if __name__ == "__main__":
 	folder='cm22975-4'
 	fileNr=285448
 
-	nIter=1
-	centre=140#-1
+	nIter=30
+	centre=156#-1
 	minSlice=10
 	maxSlice=100#290
 	minCol=50
@@ -308,9 +391,10 @@ if __name__ == "__main__":
 	angleRange=180.0
 	pathToSavu='/dls_sw/i13-1/scripts/Silvia/Reprojection/ReconstructionReprojection/savuFBP.nxs'
 	counter=14
-	outputDirectory='testFBP'
+	outputDirectory='testSIRT'
 	recAlg='FBP_CUDA'
-	tomography(folder,fileNr,pathToSavu,'data',centre,nIter, crop,angleRange,normCrop,year,outputDirectory,recAlg)
+        dictionary={'centre_of_rotation': 156, 'algorithm': 'SIRT_CUDA'}
+	tomography(folder,fileNr,pathToSavu,dictionary,'data',nIter, crop,angleRange,normCrop,year,outputDirectory)
 	'''
 	for j in range(135,145,1):
 		centre=j
