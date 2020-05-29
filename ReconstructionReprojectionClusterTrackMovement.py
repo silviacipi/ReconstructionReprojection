@@ -268,7 +268,8 @@ def tomography(folder,fileNr,pathToSavu, dictionary,dataFolder='data',nIter=10,c
     print 'looking for "',dataFolder, '" in the tree...'
     contLoop=True
     pathTot=''
-    mycent=centre
+    mycent=dictionary['centre_of_rotation']
+    #mycent=centre
     
     contLoop, pathToData, pathTot=myRec(mypath,contLoop,pathTot,dataFolder)
     print pathTot
@@ -312,10 +313,14 @@ def tomography(folder,fileNr,pathToSavu, dictionary,dataFolder='data',nIter=10,c
                 dsetKey=merlinTomo.create_dataset('image_key', data=np.zeros(a), dtype='f')  
                 dsetImage[...]=dataSmall
                 merlinTomo.close() 
-		if centre<0:
+		#if dictionary['centre_of_rotation']<0:
+		if dictionary['centre_of_rotation']<0:
 			mycent=findCentre(dataSmall[0,:,:],dataSmall[-1,:,:])
+			dictionary['centre_of_rotation']=mycent
 		else:
-			mycent=centre
+			#mycent=centre
+			mycent=dictionary['centre_of_rotation']
+		
 		print 'updating savu configuration file'
 		changeSavuFile(pathToSavu,dictionary)
 		#raw_input('press enter')
@@ -357,6 +362,8 @@ def tomography(folder,fileNr,pathToSavu, dictionary,dataFolder='data',nIter=10,c
 		else:
 			mycentNew=mycent
 		'''
+		print mycent
+		#raw_input('press enter')
 		test=rotateRegisterShiftMPI(int(a),np.copy(rec),np.copy(pippo),np.copy(dataSmallOriginal),totMovement,cols, rows, height,angleStep,crop, mycent)
 
 		dataSmall=test
@@ -374,8 +381,8 @@ if __name__ == "__main__":
 	folder='cm22975-4'
 	fileNr=285448
 
-	nIter=30
-	centre=156#-1
+	nIter=20
+	#centre=156#-1
 	minSlice=10
 	maxSlice=100#290
 	minCol=50
@@ -391,7 +398,7 @@ if __name__ == "__main__":
 	angleRange=180.0
 	pathToSavu='/dls_sw/i13-1/scripts/Silvia/Reprojection/ReconstructionReprojection/savuFBP.nxs'
 	counter=14
-	outputDirectory='testSIRT'
+	outputDirectory='testSIRTcor'
 	recAlg='FBP_CUDA'
         dictionary={'centre_of_rotation': 156, 'algorithm': 'SIRT_CUDA'}
 	tomography(folder,fileNr,pathToSavu,dictionary,'data',nIter, crop,angleRange,normCrop,year,outputDirectory)
