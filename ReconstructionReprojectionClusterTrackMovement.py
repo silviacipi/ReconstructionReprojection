@@ -73,7 +73,7 @@ def rotateMatrix(rec,M,cols,rows,height):
     return rec
 
 
-
+'''
 def myRec(obj,continueLoop,pathTot,dataFolder):  
     ### recursive function to look for the data database
     temp=None
@@ -100,8 +100,8 @@ def myRec(obj,continueLoop,pathTot,dataFolder):
             tempPath=''
     pathTot=pathTot+tempPath
     return continueLoop,temp, pathTot
-
-
+'''
+'''
 def changeCentre(pathToSavu,newCentre,recAlg):
 	f1 = h5py.File(pathToSavu, 'r+')
     	data = f1['entry/plugin/   3 /data']
@@ -111,14 +111,15 @@ def changeCentre(pathToSavu,newCentre,recAlg):
 	
     	print 'cedntre changed', data#
 	f1.close()
-
+'''
 def changeSavuFile(savuFile,dictionary):
     dataFolder='AstraReconGpu'
     contLoop=True
     pathTot=''
     print 'changing file ', savuFile
     mypathTemp=h5py.File(savuFile,'r+') 
-    contLoop, pathToData, pathTot=myRecSavu(mypathTemp,contLoop,pathTot,dataFolder)
+    contLoop, pathToData, pathTot=myRecTot(mypathTemp,contLoop,pathTot,dataFolder,False)
+    #raw_input('press enter')
     if not (contLoop):
             print 'database "',dataFolder,'" found in  ', pathTot
             pathTot=pathTot+'/data'
@@ -149,7 +150,41 @@ def changeSavuFile(savuFile,dictionary):
     mypathTemp.close()
     print 'file closed'
 
+def myRecTot(obj,continueLoop,pathTot,dataFolder,dataFolderTrue=True):  
+    ### recursive function to look for the data database
+    temp=None
+    i=1
+    tempPath=''
+    for name, value in obj.items():
+        if continueLoop:
+            #check if the object is a group
+            if isinstance(obj[name], h5py.Group):
+                tempPath='/'+name
+                if len(obj[name])>0:
+                    continueLoop,temp,tempPath= myRecTot(obj[name],continueLoop,tempPath,dataFolder,dataFolderTrue)
+                else:
+                    continue
+            else:
+                test=obj[name]
+		if dataFolderTrue==True:
+			temp1='/'+dataFolder
+                	if temp1 in test.name:
+                    		continueLoop=False
+                    		tempPath=pathTot+'/'+name
+                    	return continueLoop,test.name,tempPath
+		else:
+			temp1=dataFolder
+			if temp1==test.value[0]: 
+                    		tempPath=pathTot
+                    		continueLoop=False
+                    		return continueLoop,test.name,tempPath
+            i=i+1
+        if (i-1)>len(obj.items()):
+            tempPath=''
+    pathTot=pathTot+tempPath
+    return continueLoop,temp, pathTot
 
+'''
 def myRecSavu(obj,continueLoop,pathTot,dataFolder):  
     ### recursive function to look for the data database
     temp=None
@@ -177,6 +212,7 @@ def myRecSavu(obj,continueLoop,pathTot,dataFolder):
     pathTot=pathTot+tempPath
     print pathTot
     return continueLoop,temp, pathTot
+'''
 
 def fullPath(folder,fileNr,year=''):
 	if year=='':
@@ -268,10 +304,11 @@ def tomography(folder,fileNr,pathToSavu, dictionary,dataFolder='data',nIter=10,c
     print 'looking for "',dataFolder, '" in the tree...'
     contLoop=True
     pathTot=''
-    mycent=dictionary['centre_of_rotation']
+    centre=dictionary['centre_of_rotation']
+    #mycent=dictionary['centre_of_rotation']
     #mycent=centre
     
-    contLoop, pathToData, pathTot=myRec(mypath,contLoop,pathTot,dataFolder)
+    contLoop, pathToData, pathTot=myRecTot(mypath,contLoop,pathTot,dataFolder,True)
     print pathTot
   
     if not contLoop:
@@ -314,9 +351,12 @@ def tomography(folder,fileNr,pathToSavu, dictionary,dataFolder='data',nIter=10,c
                 dsetImage[...]=dataSmall
                 merlinTomo.close() 
 		#if dictionary['centre_of_rotation']<0:
-		if dictionary['centre_of_rotation']<0:
+		if centre<0:
+			
 			mycent=findCentre(dataSmall[0,:,:],dataSmall[-1,:,:])
 			dictionary['centre_of_rotation']=mycent
+			#print 'new centre', mycent
+			#raw_input('press enter')
 		else:
 			#mycent=centre
 			mycent=dictionary['centre_of_rotation']
@@ -347,7 +387,7 @@ def tomography(folder,fileNr,pathToSavu, dictionary,dataFolder='data',nIter=10,c
     		print 'looking for "',dataFolderRecon, '" in the tree...'
     		contLoopRecon=True
     		pathTotRecon=''
-    		contLoopCRecon, pathToDataRecon, pathTotRecon=myRec(mypathRecon,contLoopRecon,pathTotRecon,dataFolderRecon)
+    		contLoopCRecon, pathToDataRecon, pathTotRecon=myRecTot(mypathRecon,contLoopRecon,pathTotRecon,dataFolderRecon,True)
 		rec=np.nan_to_num(np.array(mypathRecon[str(pathTotRecon)]))
 		print 'new reconstruction dimensions',np.shape(rec)
                 p1=np.sum(rec,0)
@@ -381,7 +421,7 @@ if __name__ == "__main__":
 	folder='cm22975-4'
 	fileNr=285448
 
-	nIter=20
+	nIter=50
 	#centre=156#-1
 	minSlice=10
 	maxSlice=100#290
@@ -398,8 +438,8 @@ if __name__ == "__main__":
 	angleRange=180.0
 	pathToSavu='/dls_sw/i13-1/scripts/Silvia/Reprojection/ReconstructionReprojection/savuFBP.nxs'
 	counter=14
-	outputDirectory='testSIRTcor'
-	recAlg='FBP_CUDA'
+	outputDirectory='testSIRT'
+	#recAlg='FBP_CUDA'
         dictionary={'centre_of_rotation': 156, 'algorithm': 'SIRT_CUDA'}
 	tomography(folder,fileNr,pathToSavu,dictionary,'data',nIter, crop,angleRange,normCrop,year,outputDirectory)
 	'''
