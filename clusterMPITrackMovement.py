@@ -19,6 +19,8 @@ import mpi4py.MPI
 from multiprocessing import Process, Pipe,Array, Pool, Queue
 import multiprocessing as mp
 from contextlib import closing
+import gc
+
 
 
 
@@ -176,6 +178,7 @@ def rotateRegisterShift(rec,dataSmallj,dataSmallOriginal,totMovement,cols, rows,
 	#plt.figure(3)
 	#plt.imshow(dst1)
 	#plt.show()
+	gc.collect()
 	return j, dst1,p1, totMovement
 
 def rotateRegisterShiftMPI(a,rec,dataSmall,dataSmallOriginal,totMovement,cols, rows, height,angleStep, crop, mycent):
