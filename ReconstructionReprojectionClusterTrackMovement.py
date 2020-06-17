@@ -50,6 +50,7 @@ def normProjection(img,fromX,toX,fromY,toY,mean):
 
 
 def normTomo(npdata,fromX,toX,fromY,toY):
+    #raw_input('normalising...press enter')
     a,b,c=np.shape(npdata)
     img=np.zeros(np.shape(npdata))
     meanValue=np.mean(npdata[0,fromY:toY,fromX:toX])	
@@ -214,13 +215,17 @@ def myRecSavu(obj,continueLoop,pathTot,dataFolder):
     return continueLoop,temp, pathTot
 '''
 
-def fullPath(folder,fileNr,year=''):
+def fullPath(folder,fileNr,outputDirectory,year=''):
 	if year=='':
 		now = datetime.datetime.now()
 		year=str(now.year)
 	else:
 		year=str(year)
-   	directory='/dls/i13-1/data/'+year+'/'+folder+'/processing/ptychography/tomo/'+str(fileNr)+'/'
+	directory=''
+	if isinstance(fileNr,int):
+   		directory='/dls/i13-1/data/'+year+'/'+folder+'/processing/ptychography/tomo/'+str(fileNr)+'/'
+	else:
+		directory=folder+outputDirectory+'/'
 	print 'directory',directory
 	return directory
 
@@ -287,10 +292,94 @@ def savuFile(pathToSavu,directory2):
     #raw_input('press enter')
     return newPathToSavu
 
+def restart(nIter, a,c,b,directory2,fileNr,dataSmall,dataSmallOriginal,pathToSavu,dictionary,directoryResults,totMovement,centre,angleStep):
+	for i in range (nIter):
+                print 'iteration',i
+		if isinstance(fileNr,int):
+			name2=directory2+str(fileNr)+'_tomoNX_RegisteredIteration'+str(i)+'.h5'  
+		else:
+			name2=directory2+fileNr+'_'+str(i)+'.h5'  
+                print 'saving in directory', name2   
+		#raw_input('check saving directory')
+		width=c
+        	height=b   
+		merlinTomo=h5py.File(name2,"w")        	
+        	dsetImage=merlinTomo.create_dataset('data', (a,b,c), 'f')
+                dsetKey=merlinTomo.create_dataset('image_key', data=np.zeros(a), dtype='f')  
+                dsetImage[...]=dataSmall
+                merlinTomo.close() 
+		#if dictionary['centre_of_rotation']<0:
+		if centre<0:
+			
+			mycent=findCentre(dataSmall[0,:,:],dataSmall[-1,:,:])
+			dictionary['centre_of_rotation']=mycent
+			#print 'new centre', mycent
+			#raw_input('press enter')
+		else:
+			#mycent=centre
+			mycent=dictionary['centre_of_rotation']
+		
+		print 'updating savu configuration file'
+		changeSavuFile(pathToSavu,dictionary)
+		#raw_input('press enter')
+		#changeCentre(pathToSavu,mycent,recAlg)
+ 		launchSavu(name2,pathToSavu,directory2)
+		attemptLaunching=0
+		while attemptLaunching<5:
+			if directoryResults!= max(glob.glob(os.path.join(directory2, '*/')), key=os.path.getmtime):
+				directoryResults=max(glob.glob(os.path.join(directory2, '*/')), key=os.path.getmtime)
+				break
+			else:
+				attemptLaunching+=1
+				time.sleep(1.0)
+				print 'waiting to launch savu, attempt %d of 5' %(attemptLaunching)
+		if attemptLaunching==5:
+			print 'savu not launched...'
+			break
+		print directoryResults,'directoryResults'
+		time.sleep(5)
+		monitorClusterJob(directoryResults)
+                nameForRecon=directoryResults+'tomo_p1_astra_recon_gpu.h5'
+                mypathRecon=h5py.File(nameForRecon,'r') 
+    		dataFolderRecon='data'
+    		print 'looking for "',dataFolderRecon, '" in the tree...'
+    		contLoopRecon=True
+    		pathTotRecon=''
+    		contLoopCRecon, pathToDataRecon, pathTotRecon=myRecTot(mypathRecon,contLoopRecon,pathTotRecon,dataFolderRecon,True)
+		rec=np.nan_to_num(np.array(mypathRecon[str(pathTotRecon)]))
+		print 'new reconstruction dimensions',np.shape(rec)
+                p1=np.sum(rec,0)
+		print 'calculating rotation matrix'
+		rows,height,cols=np.shape(rec)
+                
+		tmp=np.zeros(np.shape(rec))
+		pippo=np.copy(dataSmall)
+		'''
+		if dictionary['algorithm']=='FBP_CUDA':
+			mycentNew=int(c/2)
+		else:
+			mycentNew=mycent
+
+		'''
+		mypathRecon.close()
+		print mycent
+		#raw_input('press enter')
+		
+		test=rotateRegisterShiftMPI(int(a),np.copy(rec),np.copy(pippo),np.copy(dataSmallOriginal),totMovement,cols, rows, height,angleStep,crop, mycent)
+
+		dataSmall=test
+
 def tomography(folder,fileNr,pathToSavu, dictionary,dataFolder='data',nIter=10,crop=[0,-1,0,-1], angleRange=180.0,normCrop=[0,50,0,50],year='',outputDirectory='test'):
     alpha=1.0
-    directory=fullPath(folder,fileNr,year)
-    directory2=directory+outputDirectory+'/'
+    directory=fullPath(folder,fileNr,outputDirectory,year)
+    directory2=''
+    print 'directory', directory
+    #raw_input('press enter')
+    if isinstance(fileNr,int):
+    	directory2=directory+outputDirectory+'/'
+    else:
+	directory2=directory
+
     if not os.path.exists(directory2):
 	os.makedirs(directory2)
     
@@ -298,7 +387,11 @@ def tomography(folder,fileNr,pathToSavu, dictionary,dataFolder='data',nIter=10,c
     
     print 'path to savu config ', pathToSavu
     #raw_input('press enter')
-    nxsfileName=directory+str(fileNr)+'_tomoNX.h5'
+    if isinstance(fileNr,str):
+    	nxsfileName=directory+fileNr+'.h5'
+	print 'it is a string'
+    else:
+    	nxsfileName=directory+str(fileNr)+'_tomoNX.h5'
     print 'file containing projections',nxsfileName
     mypath=h5py.File(nxsfileName,'r') 
     print 'looking for "',dataFolder, '" in the tree...'
@@ -307,7 +400,8 @@ def tomography(folder,fileNr,pathToSavu, dictionary,dataFolder='data',nIter=10,c
     centre=dictionary['centre_of_rotation']
     #mycent=dictionary['centre_of_rotation']
     #mycent=centre
-    
+    print directory, directory2
+    #raw_input('press enter')
     contLoop, pathToData, pathTot=myRecTot(mypath,contLoop,pathTot,dataFolder,True)
     print pathTot
   
@@ -324,9 +418,16 @@ def tomography(folder,fileNr,pathToSavu, dictionary,dataFolder='data',nIter=10,c
 	toX=normCrop[1]
 	fromY=normCrop[2]
 	toY=normCrop[3]
+	dataSmallOriginal=np.zeros(npdata.shape)
 	print 'normalising projections..'
-        dataSmallOriginal=normTomo(npdata,fromX,toX,fromY,toY)
+	if isinstance(fileNr,int):
+		print 'it is an int I normalise'
+        	dataSmallOriginal=normTomo(npdata,fromX,toX,fromY,toY)
+	else:
+		print 'it is a string I dont normalise'
+		dataSmallOriginal=npdata#normTomo(npdata,fromX,toX,fromY,toY)
 	#plt.imshow(dataSmallOriginal[0,:,:])
+	#raw_input('press enter')
 	#plt.show()
 	print 'projections normalised'
         print a,b,c, ' file images to analyse' 
@@ -336,7 +437,9 @@ def tomography(folder,fileNr,pathToSavu, dictionary,dataFolder='data',nIter=10,c
 	
 	dataSmall=dataSmallOriginal.copy()
 	directoryResults=''
-        for i in range (nIter):
+	restart(nIter,a, c,b,directory2,fileNr,dataSmall,dataSmallOriginal,pathToSavu,dictionary,directoryResults,totMovement,centre,angleStep)
+	'''        
+	for i in range (nIter):
 		if i==26:
 			print 'waiting 60 seconds for enabling savu again on cluster...'
 			time.sleep(60)
@@ -396,17 +499,19 @@ def tomography(folder,fileNr,pathToSavu, dictionary,dataFolder='data',nIter=10,c
                 
 		tmp=np.zeros(np.shape(rec))
 		pippo=np.copy(dataSmall)
-		'''
-		if dictionary['algorithm']=='FBP_CUDA':
-			mycentNew=int(c/2)
-		else:
-			mycentNew=mycent
-		'''
+
+		#if dictionary['algorithm']=='FBP_CUDA':
+		#		mycentNew=int(c/2)
+		#else:
+		#	mycentNew=mycent
+
+		mypathRecon.close()
 		print mycent
 		#raw_input('press enter')
 		test=rotateRegisterShiftMPI(int(a),np.copy(rec),np.copy(pippo),np.copy(dataSmallOriginal),totMovement,cols, rows, height,angleStep,crop, mycent)
 
 		dataSmall=test
+	'''
     else:
         print 'database "', dataFolder,'" not found!'
     mypath.close()
@@ -416,31 +521,40 @@ def tomography(folder,fileNr,pathToSavu, dictionary,dataFolder='data',nIter=10,c
 if __name__ == "__main__":
 
 
-    	year=2019
-	#folder='mg23919-1'
-	folder='cm22975-4'
-	fileNr=285448
-
-	nIter=50
+    	
+	'''
+	To START from scratch
+	folder='mg22189-1'
+	fileNr=250366
+	or to RESTART a registration that stopped
+	folder='/dls/i13-1/data/2019/mg22189-1/processing/ptychography/tomo/250366/'
+	fileNr='250366_tomoNX_RegisteredIteration1'
+	'''
+	year=2019
+	#folder='mg22189-1'
+	#fileNr=250366
+	folder='/dls/i13-1/data/2019/mg22189-1/processing/ptychography/tomo/250366/'
+	fileNr='250366_tomoNX_RegisteredIteration0_37'
+	nIter=100
 	#centre=156#-1
 	minSlice=10
 	maxSlice=100#290
-	minCol=50
-	maxCol=300
+	minCol=200
+	maxCol=700
 	crop=[minSlice,maxSlice,minCol,maxCol]
 	#normFromX=0
 	#normToX=50
 	normFromY=0
 	normToY=50
-	normFromX=350
-	normToX=390   
+	normFromX=0
+	normToX=50   
 	normCrop=[normFromX,normToX,normFromY,normToY]
-	angleRange=180.0
-	pathToSavu='/dls_sw/i13-1/scripts/Silvia/Reprojection/ReconstructionReprojection/savuFBP.nxs'
+	angleRange=140.0
+	pathToSavu='/dls/i13-1/data/2019/mg22189-1/processing/savuCOR2.nxs'
 	counter=14
-	outputDirectory='testSIRT'
+	outputDirectory='Registration_cor400_SIRT_testSC2'
 	#recAlg='FBP_CUDA'
-        dictionary={'centre_of_rotation': 156, 'algorithm': 'SIRT_CUDA'}
+        dictionary={'centre_of_rotation': 400, 'algorithm': 'SIRT_CUDA'}
 	tomography(folder,fileNr,pathToSavu,dictionary,'data',nIter, crop,angleRange,normCrop,year,outputDirectory)
 	'''
 	for j in range(135,145,1):
